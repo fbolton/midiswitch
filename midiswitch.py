@@ -51,6 +51,9 @@ class ProxyPort:
     def get_port(self):
         return self.port
 
+    def is_none(self):
+        return self.port is None
+
 
 class PortManager:
     """Keeps track of Midi ports as they are plugged in and out"""
@@ -91,7 +94,7 @@ class PortManager:
         print "Unplugged output: " + portName
         if portName in self.proxy_ports:
             self.proxy_ports[portName].get_port().close()
-            self.proxy_ports[portName] = None
+            self.proxy_ports[portName].set_port(None)
             print "Deactivated output: " + portName
 
     def register_from(self, portName, route):
