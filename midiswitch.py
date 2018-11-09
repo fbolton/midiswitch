@@ -28,9 +28,13 @@ class XGNormalVoice:
 
     def lookup(self, program_group, bank_lsb):
         # Returns a tuple: (program_number, bank_lsb)
-        voice_group = XGNormalVoice.AllVoices[program_group / 8]
+        voice_group = XGNormalVoice.AllVoices[program_group]
         group_len = len(voice_group)
         return voice_group[bank_lsb % group_len]
+
+    def program_group_len(self, program_group):
+        voice_group = XGNormalVoice.AllVoices[program_group]
+        return len(voice_group)
 
 
 class ProxyPort:
@@ -167,14 +171,88 @@ class RouterQY100:
                 # detect special values for changing program group
                 data = byte_list[7]
                 if data%8==0:
-                    self.program_group = data
+                    self.program_group = data / 8
             msg = mido.parse(byte_list)
         if msg.type=='program_change':
             byte_list = msg.bytes()
-            byte_list[1] = self.program_group + byte_list[1]%8
+            byte_list[1] = self.program_group * 8 + byte_list[1]%8
             msg = mido.parse(byte_list)
         self.to_endpoint.send(msg)
 
+
+class RouterBeatStepPro2QY100:
+    def __init__(self, port_manager):
+        self.port_manager = port_manager
+        self.port_manager.register_from(PortManager.BEATSTEP_PRO_1, self)
+        self.to_endpoint = self.port_manager.get_proxy_port(PortManager.MIDI_ADAPTER_CABLE)
+        self.xg = XGNormalVoice()
+        self.value_list = [0, 0, 127, 64, 0, 0, 0, 0,
+                           0, 0, 127, 64, 0, 0, 0, 0]
+        self.sysex_codes = [0x1a, # AtkTim
+                            0x1c, # RelTim
+                            0x18, # FltCut
+                            0x19, # FltRes
+                            0x13, # RvbSnd
+                            0x12  # ChoSnd
+                            ]
+
+    def increment_value(self, val, inc, max_val=127):
+        if inc >= 0:
+            return min(val + inc, max_val)
+        else:
+            return max(val + inc, 0)
+
+    def send(self, msg):
+        # print msg
+        if msg.type!='control_change':
+            # Pass through by default, for non-CC messages
+            self.to_endpoint.send(msg)
+            return
+        if msg.type=='control_change' and (int(msg.value) - 64)==0:
+            # Zero increment => do nothing!
+            return
+        if msg.type=='control_change' and ((msg.control>=102 and msg.control<=107) or (msg.control>=110 and msg.control<=115)):
+            knob_index = int(msg.control) - 102
+            chan = knob_index / 8  # Integer division gives 0 or 1 here
+            sysex_code = self.sysex_codes[knob_index % 8]
+            new_val = self.increment_value(self.value_list[knob_index], int(msg.value) - 64)
+            self.value_list[knob_index] = new_val
+            byte_list = [0xF0, 0x43, 0x10, 0x4c, 0x08, chan, sysex_code, new_val, 0xF7]
+            # print byte_list
+            self.to_endpoint.send(mido.parse(byte_list))
+            return
+        if msg.type=='control_change' and (msg.control==108 or msg.control==116):
+            knob_index = int(msg.control) - 102
+            chan = knob_index / 8  # Integer division gives 0 or 1 here
+            # Program
+            program_group = self.increment_value(self.value_list[knob_index], int(msg.value) - 64, max_val=15)
+            self.value_list[knob_index] = program_group
+            # Reset the Bank LSB to zero also
+            self.value_list[knob_index+1] = 0
+            msg = mido.Message('control_change', channel=chan, control=0, value=0)
+            self.to_endpoint.send(msg)
+            msg = mido.Message('control_change', channel=chan, control=32, value=0)
+            self.to_endpoint.send(msg)
+            msg = mido.Message('program_change', channel=chan, program=program_group * 8)
+            self.to_endpoint.send(msg)
+            return
+        if msg.type=='control_change' and (msg.control==109 or msg.control==117):
+            knob_index = int(msg.control) - 102
+            chan = knob_index / 8  # Integer division gives 0 or 1 here
+            # Bank select LSB
+            program_group = self.value_list[knob_index-1]
+            group_len = self.xg.program_group_len(program_group)
+            new_val = self.increment_value(self.value_list[knob_index], int(msg.value) - 64, max_val= group_len - 1)
+            self.value_list[knob_index] = new_val
+            (program, bank_lsb) = self.xg.lookup(program_group, new_val)
+            # print "(program, bank_lsb) = " + str(program) + ", " + str(bank_lsb)
+            msg = mido.Message('control_change', channel=chan, control=0, value=0)
+            self.to_endpoint.send(msg)
+            msg = mido.Message('control_change', channel=chan, control=32, value=bank_lsb)
+            self.to_endpoint.send(msg)
+            msg = mido.Message('program_change', channel=chan, program=program)
+            self.to_endpoint.send(msg)
+            return
 
 
 def main():
@@ -187,6 +265,7 @@ def main():
     manager = PortManager()
     # router = RouterThru(manager, PortManager.NOVATION_REMOTE_37SL_1, PortManager.MIDI_ADAPTER_CABLE)
     router = RouterQY100(manager)
+    router2 = RouterBeatStepPro2QY100(manager)
     while True:
         # Update input ports
         raw_input_names = mido.get_input_names()
@@ -223,7 +302,6 @@ def main():
             manager.dispatch_pending_messages()
         # Wait for a second...
         # time.sleep(0.5)
-
 
 
 main()
