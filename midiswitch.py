@@ -63,6 +63,9 @@ class PortManager:
     NOVATION_REMOTE_37SL_3 = "ReMOTE SL MIDI 3"
     BEATSTEP_PRO_1 = "Arturia BeatStep Pro MIDI 1"
     BEATSTEP_PRO_2 = "Arturia BeatStep Pro MIDI 2"
+    MODEL_D = "MODEL D MIDI 1"
+    BLOFELD = "Blofeld MIDI 1"
+    KEYSTEP = "Arturia KeyStep 32 MIDI 1"
 
 
     def __init__(self):
