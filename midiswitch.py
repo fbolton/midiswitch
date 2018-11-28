@@ -63,15 +63,16 @@ class PortManager:
     NOVATION_REMOTE_37SL_3 = "ReMOTE SL MIDI 3"
     BEATSTEP_PRO_1 = "Arturia BeatStep Pro MIDI 1"
     BEATSTEP_PRO_2 = "Arturia BeatStep Pro MIDI 2"
+    KEYSTEP = "Arturia KeyStep 32 MIDI 1"
     MODEL_D = "MODEL D MIDI 1"
     BLOFELD = "Blofeld MIDI 1"
-    KEYSTEP = "Arturia KeyStep 32 MIDI 1"
 
 
     def __init__(self):
         self.active_inputs = {}
         self.from_endpoints = {}
         self.proxy_ports = {}
+        self.router_rules = []
 
     def activate_input(self, portName):
         print "Dectected new input: " + portName
@@ -100,11 +101,11 @@ class PortManager:
             self.proxy_ports[portName].set_port(None)
             print "Deactivated output: " + portName
 
-    def register_from(self, portName, route):
+    def register_from(self, portName, rule):
         if portName not in self.from_endpoints:
             # Create an empty list of registered routes for portName
             self.from_endpoints[portName] = []
-        self.from_endpoints[portName].append(route)
+        self.from_endpoints[portName].append(rule)
 
     def get_proxy_port(self, portName):
         if portName in self.proxy_ports:
@@ -117,33 +118,109 @@ class PortManager:
     def dispatch_pending_messages(self):
         for port_name in self.active_inputs:
             input_port = self.active_inputs[port_name]
-            from_list = self.from_endpoints[port_name]
+            rule_list = self.from_endpoints[port_name]
             for msg in input_port.iter_pending():
-                for endpoint in from_list:
-                    endpoint.send(msg)
+                for rule in rule_list:
+                    if rule.matches(msg, port_name):
+                        rule.send(msg)
+                        break # Match one rule only
+
+    def addRule(self, fromPortList, toPort, msgMatcher, sysexMatcher, msgMapper, router):
+        self.router_rules.append(RouterRule(self, fromPortList, toPort, msgMatcher, sysexMatcher, msgMapper, router))
+
+
+class RouterRule:
+    def __init__(self, port_manager, fromPortList, toPort, msgMatcher, sysexMatcher, msgMapper, router):
+        self.port_manager = port_manager
+        if isinstance(fromPortList, basestring):
+            # Make sure that 'fromPortList' actually is a list
+            fromPortList = [fromPortList]
+        self.fromPortList = fromPortList
+        self.toPort = toPort
+        self.msgMatcher = msgMatcher
+        self.sysexMatcher = sysexMatcher
+        self.msgMapper = msgMapper
+        self.router = router
+        # Register ports
+        for fromPort in self.fromPortList:
+            self.port_manager.register_from(fromPort, self)
+        self.toPortProxy = self.port_manager.get_proxy_port(self.toPort)
+
+    def is_system_common_message(self, msg):
+        # A Midi system common message has *no* associated Midi channel
+        # and its first byte always has the form 0xFn
+        return msg.bytes()[0] & 0xF0 == 0xF0
+
+    def matches(self, msg, fromPort):
+        if self.toPortProxy.is_none():
+            # Skip rule, if output port is disabled
+            return False
+        if fromPort in self.fromPortList:
+            if not self.is_system_common_message(msg):
+                # Messages with a well-defined channel
+                if self.msgMatcher is None:
+                    return False
+                else:
+                    return self.msgMatcher.matches(msg)
+            else:
+                # System common messages messages (including sysex)
+                if self.sysexMatcher is None:
+                    return False
+                else:
+                    return self.sysexMatcher.matches(msg)
+        else:
+            return False
+
+    def send(self, msg):
+        if self.msgMapper is not None:
+            # print "Before msg map: " + str(msg)
+            msg = self.msgMapper.map(msg)
+            # print "After msg map: " + str(msg)
+        self.router.send(msg, self.toPortProxy)
+
+
+class ChannelMatcher:
+    def __init__(self, chan, chanMax = None):
+        self.chan = chan
+        self.chanMax = chanMax
+
+    def matches(self, msg):
+        if self.chanMax is None:
+            return msg.channel == self.chan
+        else:
+            return (self.chan <= msg.channel) and (msg.channel <= self.chanMax)
+
+
+class SysexDevice:
+    def __init__(self, deviceID):
+        self.deviceID = deviceID
+
+    def matches(self, msg):
+        return msg.bytes()[1] == self.deviceID
+
+
+class ChannelMapper:
+    def __init__(self, chanMapFunction):
+        self.chanMapFunction = chanMapFunction
+
+    def map(self, msg):
+        msg.channel = self.chanMapFunction(msg.channel)
+        return msg
 
 
 class RouterThru:
-    def __init__(self, port_manager, from_port, to_port):
-        self.port_manager = port_manager
-        self.port_manager.register_from(from_port, self)
-        self.to_endpoint = self.port_manager.get_proxy_port(to_port)
-
-    def send(self, msg):
+    def send(self, msg, toPortProxy):
         # print msg
-        self.to_endpoint.send(msg)
+        toPortProxy.send(msg)
 
 
 class RouterQY100:
-    def __init__(self, port_manager):
-        self.port_manager = port_manager
-        self.port_manager.register_from(PortManager.MIDI_ADAPTER_CABLE, self)
-        self.to_endpoint = self.port_manager.get_proxy_port(PortManager.MIDI_ADAPTER_CABLE)
+    def __init__(self):
         self.part = 0
         self.program_group = 0
         self.xg = XGNormalVoice()
 
-    def send(self, msg):
+    def send(self, msg, toPortProxy):
         # print msg
         if msg.type=='note_on' or msg.type=='note_off' or msg.type=='aftertouch':
             msg.channel = self.part
@@ -162,11 +239,11 @@ class RouterQY100:
             (program, bank_lsb) = self.xg.lookup(self.program_group, msg.value)
             # print "(program, bank_lsb) = " + str(program) + ", " + str(bank_lsb)
             msg = mido.Message('control_change', channel=self.part, control=0, value=0)
-            self.to_endpoint.send(msg)
+            toPortProxy.send(msg)
             msg = mido.Message('control_change', channel=self.part, control=32, value=bank_lsb)
-            self.to_endpoint.send(msg)
+            toPortProxy.send(msg)
             msg = mido.Message('program_change', channel=self.part, program=program)
-            self.to_endpoint.send(msg)
+            toPortProxy.send(msg)
             return
         if msg.hex().startswith('F0 43 10 4C 08'):
             # Sysex messages for controlling QY100 parts
@@ -183,14 +260,11 @@ class RouterQY100:
             byte_list = msg.bytes()
             byte_list[1] = self.program_group * 8 + byte_list[1]%8
             msg = mido.parse(byte_list)
-        self.to_endpoint.send(msg)
+        toPortProxy.send(msg)
 
 
 class RouterBeatStepPro2QY100:
-    def __init__(self, port_manager):
-        self.port_manager = port_manager
-        self.port_manager.register_from(PortManager.BEATSTEP_PRO_1, self)
-        self.to_endpoint = self.port_manager.get_proxy_port(PortManager.MIDI_ADAPTER_CABLE)
+    def __init__(self):
         self.xg = XGNormalVoice()
         self.value_list = [0, 0, 127, 64, 0, 0, 0, 0,
                            0, 0, 127, 64, 0, 0, 0, 0]
@@ -208,11 +282,11 @@ class RouterBeatStepPro2QY100:
         else:
             return max(val + inc, 0)
 
-    def send(self, msg):
+    def send(self, msg, toPortProxy):
         # print msg
         if msg.type!='control_change':
             # Pass through by default, for non-CC messages
-            self.to_endpoint.send(msg)
+            toPortProxy.send(msg)
             return
         if msg.type=='control_change' and (int(msg.value) - 64)==0:
             # Zero increment => do nothing!
@@ -225,7 +299,7 @@ class RouterBeatStepPro2QY100:
             self.value_list[knob_index] = new_val
             byte_list = [0xF0, 0x43, 0x10, 0x4c, 0x08, chan, sysex_code, new_val, 0xF7]
             # print byte_list
-            self.to_endpoint.send(mido.parse(byte_list))
+            toPortProxy.send(mido.parse(byte_list))
             return
         if msg.type=='control_change' and (msg.control==108 or msg.control==116):
             knob_index = int(msg.control) - 102
@@ -236,11 +310,11 @@ class RouterBeatStepPro2QY100:
             # Reset the Bank LSB to zero also
             self.value_list[knob_index+1] = 0
             msg = mido.Message('control_change', channel=chan, control=0, value=0)
-            self.to_endpoint.send(msg)
+            toPortProxy.send(msg)
             msg = mido.Message('control_change', channel=chan, control=32, value=0)
-            self.to_endpoint.send(msg)
+            toPortProxy.send(msg)
             msg = mido.Message('program_change', channel=chan, program=program_group * 8)
-            self.to_endpoint.send(msg)
+            toPortProxy.send(msg)
             return
         if msg.type=='control_change' and (msg.control==109 or msg.control==117):
             knob_index = int(msg.control) - 102
@@ -253,11 +327,11 @@ class RouterBeatStepPro2QY100:
             (program, bank_lsb) = self.xg.lookup(program_group, new_val)
             # print "(program, bank_lsb) = " + str(program) + ", " + str(bank_lsb)
             msg = mido.Message('control_change', channel=chan, control=0, value=0)
-            self.to_endpoint.send(msg)
+            toPortProxy.send(msg)
             msg = mido.Message('control_change', channel=chan, control=32, value=bank_lsb)
-            self.to_endpoint.send(msg)
+            toPortProxy.send(msg)
             msg = mido.Message('program_change', channel=chan, program=program)
-            self.to_endpoint.send(msg)
+            toPortProxy.send(msg)
             return
 
 
@@ -270,8 +344,40 @@ def main():
     active_output_names = set()
     manager = PortManager()
     # router = RouterThru(manager, PortManager.NOVATION_REMOTE_37SL_1, PortManager.MIDI_ADAPTER_CABLE)
-    router = RouterQY100(manager)
-    router2 = RouterBeatStepPro2QY100(manager)
+    # router = RouterQY100(manager)
+    # router2 = RouterBeatStepPro2QY100(manager)
+    manager.addRule(
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP], # List of incoming ports
+        manager.MODEL_D, # Outgoing port
+        ChannelMatcher(8), # Route channel 9 (=8+1) to the Model D
+        None, # No sysex matcher
+        ChannelMapper(lambda x: 0), # Map Model D messages to channel 1
+        RouterThru()
+    )
+    manager.addRule(
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP], # List of incoming ports
+        manager.BLOFELD, # Outgoing port
+        ChannelMatcher(10, 15), # Route channels 11-16 to the Blofeld
+        None, # No sysex matcher
+        ChannelMapper(lambda x: x - 10), # Map Blofeld messages to channels 1-6
+        RouterThru()
+    )
+    manager.addRule(
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP], # List of incoming ports
+        manager.MIDI_ADAPTER_CABLE, # Outgoing port for QY100
+        ChannelMatcher(0, 15), # Route all channels to the QY100
+        None, # No sysex matcher
+        None, # No channel mapper
+        RouterBeatStepPro2QY100()
+    )
+    manager.addRule(
+        manager.NOVATION_REMOTE_37SL_1, # List of incoming ports
+        manager.MIDI_ADAPTER_CABLE, # Outgoing port for QY100
+        ChannelMatcher(0, 15), # Route all channels to the QY100
+        SysexDevice(0x43), # Match sysex messages with ID = 0x43
+        None, # No channel mapper
+        RouterQY100()
+    )
     while True:
         # Update input ports
         raw_input_names = mido.get_input_names()
