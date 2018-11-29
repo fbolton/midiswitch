@@ -204,7 +204,7 @@ class ChannelMapper:
         self.chanMapFunction = chanMapFunction
 
     def map(self, msg):
-        msg.channel = self.chanMapFunction(msg.channel)
+        msg.channel = self.chanMapFunction(int(msg.channel))
         return msg
 
 
