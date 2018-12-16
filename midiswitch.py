@@ -266,15 +266,28 @@ class RouterQY100:
 class RouterBeatStepPro2QY100:
     def __init__(self):
         self.xg = XGNormalVoice()
-        self.value_list = [0, 0, 127, 64, 0, 0, 0, 0,
-                           0, 0, 127, 64, 0, 0, 0, 0]
-        self.sysex_codes = [0x1a, # AtkTim
-                            0x1c, # RelTim
+        self.value_list_allchannels = []
+        self.value_list_defaults = [64, 64, 64,  64,  64, 64, 64, 64,
+                                    64,  0, 40, 127, 100, 64,  0,  0]
+        self.sysex_codes = [
                             0x18, # FltCut
+                            0x1a, # AtkTim
+                            0x1b, # DecTim
+                            0x1c, # RelTim
+                            0x69, # PEG InitLvl
+                            0x6a, # PEG AtkTim
+                            0x6b, # PEG RelLvl
+                            0x6c, # PEG RelTim
                             0x19, # FltRes
+                            0x12, # ChoSnd
                             0x13, # RvbSnd
-                            0x12  # ChoSnd
+                            0x11, # DryLvl
+                            0x0b, # Vol
+                            0x0e  # Pan
                             ]
+        for k in range(16):
+            # Need to do a deep copy here!
+            self.value_list_allchannels.append(self.value_list_defaults[:])
 
     def increment_value(self, val, inc, max_val=127):
         if inc >= 0:
@@ -291,24 +304,26 @@ class RouterBeatStepPro2QY100:
         if msg.type=='control_change' and (int(msg.value) - 64)==0:
             # Zero increment => do nothing!
             return
-        if msg.type=='control_change' and ((msg.control>=102 and msg.control<=107) or (msg.control>=110 and msg.control<=115)):
+        if msg.type=='control_change' and ((msg.control>=102 and msg.control<=115)):
             knob_index = int(msg.control) - 102
-            chan = knob_index / 8  # Integer division gives 0 or 1 here
-            sysex_code = self.sysex_codes[knob_index % 8]
-            new_val = self.increment_value(self.value_list[knob_index], int(msg.value) - 64)
-            self.value_list[knob_index] = new_val
+            chan = int(msg.channel)
+            sysex_code = self.sysex_codes[knob_index]
+            value_list = self.value_list_allchannels[chan]
+            new_val = self.increment_value(value_list[knob_index], int(msg.value) - 64)
+            value_list[knob_index] = new_val
             byte_list = [0xF0, 0x43, 0x10, 0x4c, 0x08, chan, sysex_code, new_val, 0xF7]
             # print byte_list
             toPortProxy.send(mido.parse(byte_list))
             return
-        if msg.type=='control_change' and (msg.control==108 or msg.control==116):
+        if msg.type=='control_change' and msg.control==116:
             knob_index = int(msg.control) - 102
-            chan = knob_index / 8  # Integer division gives 0 or 1 here
+            chan = int(msg.channel)
+            value_list = self.value_list_allchannels[chan]
             # Program
-            program_group = self.increment_value(self.value_list[knob_index], int(msg.value) - 64, max_val=15)
-            self.value_list[knob_index] = program_group
+            program_group = self.increment_value(value_list[knob_index], int(msg.value) - 64, max_val=15)
+            value_list[knob_index] = program_group
             # Reset the Bank LSB to zero also
-            self.value_list[knob_index+1] = 0
+            value_list[knob_index+1] = 0
             msg = mido.Message('control_change', channel=chan, control=0, value=0)
             toPortProxy.send(msg)
             msg = mido.Message('control_change', channel=chan, control=32, value=0)
@@ -316,14 +331,15 @@ class RouterBeatStepPro2QY100:
             msg = mido.Message('program_change', channel=chan, program=program_group * 8)
             toPortProxy.send(msg)
             return
-        if msg.type=='control_change' and (msg.control==109 or msg.control==117):
+        if msg.type=='control_change' and msg.control==117:
             knob_index = int(msg.control) - 102
-            chan = knob_index / 8  # Integer division gives 0 or 1 here
+            chan = int(msg.channel)
+            value_list = self.value_list_allchannels[chan]
             # Bank select LSB
-            program_group = self.value_list[knob_index-1]
+            program_group = value_list[knob_index-1]
             group_len = self.xg.program_group_len(program_group)
-            new_val = self.increment_value(self.value_list[knob_index], int(msg.value) - 64, max_val= group_len - 1)
-            self.value_list[knob_index] = new_val
+            new_val = self.increment_value(value_list[knob_index], int(msg.value) - 64, max_val= group_len - 1)
+            value_list[knob_index] = new_val
             (program, bank_lsb) = self.xg.lookup(program_group, new_val)
             # print "(program, bank_lsb) = " + str(program) + ", " + str(bank_lsb)
             msg = mido.Message('control_change', channel=chan, control=0, value=0)
