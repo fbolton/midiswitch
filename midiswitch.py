@@ -124,6 +124,9 @@ class PortManager:
                     if rule.matches(msg, port_name):
                         rule.send(msg)
                         break # Match one rule only
+                # Avoid sending the next message too soon - 1ms sleep
+                # (suspected cause of "stuck" notes)
+                time.sleep(0.001)
 
     def addRule(self, fromPortList, toPort, msgMatcher, sysexMatcher, msgMapper, router):
         self.router_rules.append(RouterRule(self, fromPortList, toPort, msgMatcher, sysexMatcher, msgMapper, router))
