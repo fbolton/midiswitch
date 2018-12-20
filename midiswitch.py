@@ -211,10 +211,42 @@ class ChannelMapper:
         return msg
 
 
+class CCtoNoteMapper:
+    def __init__(self):
+        self.cc_to_note = {20:73, 21:75,       23:78, 24:80, 25:82,
+                        28:72, 29:74, 30:76, 31:77, 52:79, 53:81, 54:83, 55:84}
+
+    def map(self, msg):
+        if msg.type == 'control_change':
+            cc = int(msg.control)
+            chan = int(msg.channel)
+            value = int(msg.value)
+            if cc in self.cc_to_note:
+                note = self.cc_to_note[cc]
+                if value == 127:
+                    # 127 => Note on
+                    byte_list = [0x90|chan, note, 100]
+                    msg = mido.parse(byte_list)
+                else:
+                    # 0 => Note off
+                    byte_list = [0x80|chan, note, 100]
+                    msg = mido.parse(byte_list)
+        return msg
+
+
 class RouterThru:
     def send(self, msg, toPortProxy):
         # print msg
         toPortProxy.send(msg)
+
+
+class RouterCCtoNote:
+    def __init__(self):
+        self.mapper = CCtoNoteMapper()
+
+    def send(self, msg, toPortProxy):
+        # print msg
+        toPortProxy.send(self.mapper.map(msg))
 
 
 class RouterQY100:
@@ -268,6 +300,7 @@ class RouterQY100:
 
 class RouterBeatStepPro2QY100:
     def __init__(self):
+        self.note_mapper = CCtoNoteMapper()
         self.xg = XGNormalVoice()
         self.value_list_allchannels = []
         self.value_list_defaults = [64, 64, 64,  64,  64, 64, 64, 64,
@@ -352,6 +385,8 @@ class RouterBeatStepPro2QY100:
             msg = mido.Message('program_change', channel=chan, program=program)
             toPortProxy.send(msg)
             return
+        #else
+        toPortProxy.send(self.note_mapper.map(msg))
 
 
 def main():
@@ -366,23 +401,23 @@ def main():
     # router = RouterQY100(manager)
     # router2 = RouterBeatStepPro2QY100(manager)
     manager.addRule(
-        [manager.BEATSTEP_PRO_1, manager.KEYSTEP], # List of incoming ports
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE], # List of incoming ports
         manager.MODEL_D, # Outgoing port
         ChannelMatcher(8), # Route channel 9 (=8+1) to the Model D
         None, # No sysex matcher
         ChannelMapper(lambda x: 0), # Map Model D messages to channel 1
-        RouterThru()
+        RouterCCtoNote()
     )
     manager.addRule(
-        [manager.BEATSTEP_PRO_1, manager.KEYSTEP], # List of incoming ports
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE], # List of incoming ports
         manager.BLOFELD, # Outgoing port
         ChannelMatcher(10, 15), # Route channels 11-16 to the Blofeld
         None, # No sysex matcher
         ChannelMapper(lambda x: x - 10), # Map Blofeld messages to channels 1-6
-        RouterThru()
+        RouterCCtoNote()
     )
     manager.addRule(
-        [manager.BEATSTEP_PRO_1, manager.KEYSTEP], # List of incoming ports
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE], # List of incoming ports
         manager.MIDI_ADAPTER_CABLE, # Outgoing port for QY100
         ChannelMatcher(0, 15), # Route all channels to the QY100
         None, # No sysex matcher
