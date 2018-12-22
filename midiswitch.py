@@ -248,6 +248,29 @@ class RouterCCtoNote:
         # print msg
         toPortProxy.send(self.mapper.map(msg))
 
+class RouterToModelD:
+    def __init__(self):
+        pass
+
+    def send(self, msg, toPortProxy):
+        if msg.type=='control_change' and (20<=msg.control and msg.control<=22) and msg.value == 127:
+            # Change the key priority
+            key_priority = int(msg.control) - 20
+            byte_list = [0xF0, 0x00, 0x20, 0x32, 0x00, 0x7F, 0x0A, 0x01, 0x00, key_priority, 0xF7]
+            # print byte_list
+            toPortProxy.send(mido.parse(byte_list))
+            return
+        if msg.type=='control_change' and (28<=msg.control and msg.control<=29) and msg.value == 127:
+            # Change multi trigger option
+            multi_trigger = int(msg.control) - 28
+            byte_list = [0xF0, 0x00, 0x20, 0x32, 0x00, 0x7F, 0x0A, 0x02, 0x00, multi_trigger, 0xF7]
+            # print byte_list
+            toPortProxy.send(mido.parse(byte_list))
+            return
+        # print msg
+        toPortProxy.send(msg)
+
+
 
 class RouterQY100:
     def __init__(self):
@@ -406,7 +429,7 @@ def main():
         ChannelMatcher(8), # Route channel 9 (=8+1) to the Model D
         None, # No sysex matcher
         ChannelMapper(lambda x: 0), # Map Model D messages to channel 1
-        RouterCCtoNote()
+        RouterToModelD()
     )
     manager.addRule(
         [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE], # List of incoming ports
