@@ -243,6 +243,10 @@ class RouterThru:
 
 class RouterWithKeyboardSplit:
     def __init__(self):
+        self.note_60_borrow = False
+        self.note_36_borrow = False
+        self.note_72_borrow = False
+        self.note_84_borrow = False
         self.channel_map =\
             {0: [0], 1: [1, 0], 2: [2, 1, 0], 3: [3, 2, 1, 0], 4: [4], 5: [5, 4], 6: [6, 5, 4], 7: [7, 6, 5, 4],
              8: [8], 9: [9, 8], 10: [10, 9, 8], 11: [11, 10, 9, 8], 12: [12], 13: [13, 12], 14: [14, 13, 12], 15: [15, 14, 13, 12]}
@@ -281,34 +285,52 @@ class RouterWithKeyboardSplit:
             elif split_size==2:
                 # 2-fold split
                 # Split at middle C = 60
-                if note<60:
+                if note<60 or (note==60 and self.note_60_borrow):
+                    if 55<=note:
+                        self.note_60_borrow = True
                     msg.note = int(msg.note) + 24  # Transpose up by two octaves
                     self.send_to_channel(msg, toPortProxy, chan_list[0])
                 else:
+                    self.note_60_borrow = False
                     msg.note = int(msg.note) - 24  # Transpose down by two octaves
                     self.send_to_channel(msg, toPortProxy, chan_list[1])
                 return
             elif split_size==3:
                 # 3-fold split
-                if note<36:
+                if note<36 or (note==36 and self.note_36_borrow):
+                    if 31<=note:
+                        self.note_36_borrow = True
                     msg.note = int(msg.note) + 12  # Transpose up by one octave
                     self.send_to_channel(msg, toPortProxy, chan_list[0])
-                elif note<72:
+                elif note<72 or (note==72 and self.note_72_borrow):
+                    self.note_36_borrow = False
+                    if 67<=note:
+                        self.note_72_borrow = True
                     self.send_to_channel(msg, toPortProxy, chan_list[1])
                 else:
+                    self.note_72_borrow = False
                     msg.note = int(msg.note) - 24  # Transpose down by two octaves
                     self.send_to_channel(msg, toPortProxy, chan_list[2])
                 return
             elif split_size==4:
                 # 4-fold split
-                if note<36:
+                if note<36 or (note==36 and self.note_36_borrow):
+                    if 31<=note:
+                        self.note_36_borrow = True
                     msg.note = int(msg.note) + 12  # Transpose up by one octave
                     self.send_to_channel(msg, toPortProxy, chan_list[0])
-                elif note<60:
+                elif note<60 or (note==60 and self.note_60_borrow):
+                    self.note_36_borrow = False
+                    if 55<=note:
+                        self.note_60_borrow = True
                     self.send_to_channel(msg, toPortProxy, chan_list[1])
-                elif note<84:
+                elif note<84 or (note==84 and self.note_84_borrow):
+                    self.note_60_borrow = False
+                    if 79<=note:
+                        self.note_84_borrow = True
                     self.send_to_channel(msg, toPortProxy, chan_list[2])
                 else:
+                    self.note_84_borrow = False
                     msg.note = int(msg.note) - 24  # Transpose down by two octaves
                     self.send_to_channel(msg, toPortProxy, chan_list[3])
                 return
