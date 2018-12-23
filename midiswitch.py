@@ -64,6 +64,7 @@ class PortManager:
     BEATSTEP_PRO_1 = "Arturia BeatStep Pro MIDI 1"
     BEATSTEP_PRO_2 = "Arturia BeatStep Pro MIDI 2"
     KEYSTEP = "Arturia KeyStep 32 MIDI 1"
+    YAMAHA_P45 = "Digital Piano MIDI 1"
     MODEL_D = "MODEL D MIDI 1"
     BLOFELD = "Blofeld MIDI 1"
 
@@ -123,7 +124,7 @@ class PortManager:
                 for rule in rule_list:
                     if rule.matches(msg, port_name):
                         # Try to avoid stuck notes
-                        if msg.type=='note_off':
+                        if (msg.type=='note_off') or (msg.type=='note_on' and int(msg.velocity)==0):
                             time.sleep(0.001)
                         rule.send(msg)
                         break # Match one rule only
@@ -240,6 +241,79 @@ class RouterThru:
         toPortProxy.send(msg)
 
 
+class RouterWithKeyboardSplit:
+    def __init__(self):
+        self.channel_map =\
+            {0: [0], 1: [1, 0], 2: [2, 1, 0], 3: [3, 2, 1, 0], 4: [4], 5: [5, 4], 6: [6, 5, 4], 7: [7, 6, 5, 4],
+             8: [8], 9: [9, 8], 10: [10, 9, 8], 11: [11, 10, 9, 8], 12: [12], 13: [13, 12], 14: [14, 13, 12], 15: [15, 14, 13, 12]}
+
+    def is_system_common_message(self, msg):
+        # A Midi system common message has *no* associated Midi channel
+        # and its first byte always has the form 0xFn
+        return msg.bytes()[0] & 0xF0 == 0xF0
+
+    def send_to_channel(self, msg, toPortProxy, chan):
+        byte_list = msg.bytes()
+        # Replace original channel with 'chan'
+        byte_list[0] = (byte_list[0] & 0xF0) | chan
+        toPortProxy.send(mido.parse(byte_list))
+        return
+
+    def send(self, msg, toPortProxy):
+        if self.is_system_common_message(msg):
+            # Ignore system common messages
+            return
+        in_chan = int(msg.channel)
+        chan_list = self.channel_map[in_chan]
+        if not (msg.type=='note_on' or msg.type=='note_off'):
+            # Default behaviour: send to all channels in split
+            # (for example, sustain pedal messages)
+            for out_chan in chan_list:
+                self.send_to_channel(msg, toPortProxy, out_chan)
+            return
+        else:
+            split_size = len(chan_list)
+            note = int(msg.note)
+            if split_size==1:
+                # No split => use whole keyboard
+                self.send_to_channel(msg, toPortProxy, chan_list[0])
+                return
+            elif split_size==2:
+                # 2-fold split
+                # Split at middle C = 60
+                if note<60:
+                    msg.note = int(msg.note) + 24  # Transpose up by two octaves
+                    self.send_to_channel(msg, toPortProxy, chan_list[0])
+                else:
+                    msg.note = int(msg.note) - 24  # Transpose down by two octaves
+                    self.send_to_channel(msg, toPortProxy, chan_list[1])
+                return
+            elif split_size==3:
+                # 3-fold split
+                if note<36:
+                    msg.note = int(msg.note) + 12  # Transpose up by one octave
+                    self.send_to_channel(msg, toPortProxy, chan_list[0])
+                elif note<72:
+                    self.send_to_channel(msg, toPortProxy, chan_list[1])
+                else:
+                    msg.note = int(msg.note) - 24  # Transpose down by two octaves
+                    self.send_to_channel(msg, toPortProxy, chan_list[2])
+                return
+            elif split_size==4:
+                # 4-fold split
+                if note<36:
+                    msg.note = int(msg.note) + 12  # Transpose up by one octave
+                    self.send_to_channel(msg, toPortProxy, chan_list[0])
+                elif note<60:
+                    self.send_to_channel(msg, toPortProxy, chan_list[1])
+                elif note<84:
+                    self.send_to_channel(msg, toPortProxy, chan_list[2])
+                else:
+                    msg.note = int(msg.note) - 24  # Transpose down by two octaves
+                    self.send_to_channel(msg, toPortProxy, chan_list[3])
+                return
+
+
 class RouterCCtoNote:
     def __init__(self):
         self.mapper = CCtoNoteMapper()
@@ -342,7 +416,7 @@ class RouterBeatStepPro2QY100:
                             0x13, # RvbSnd
                             0x11, # DryLvl
                             0x0b, # Vol
-                            0x0e  # Pan
+                            0x08  # Note shift -24..+24 semitone
                             ]
         for k in range(16):
             # Need to do a deep copy here!
@@ -420,9 +494,6 @@ def main():
     active_input_names = set()
     active_output_names = set()
     manager = PortManager()
-    # router = RouterThru(manager, PortManager.NOVATION_REMOTE_37SL_1, PortManager.MIDI_ADAPTER_CABLE)
-    # router = RouterQY100(manager)
-    # router2 = RouterBeatStepPro2QY100(manager)
     manager.addRule(
         [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE], # List of incoming ports
         manager.MODEL_D, # Outgoing port
@@ -454,6 +525,30 @@ def main():
         SysexDevice(0x43), # Match sysex messages with ID = 0x43
         None, # No channel mapper
         RouterQY100()
+    )
+    manager.addRule(
+        manager.YAMAHA_P45, # List of incoming ports
+        manager.MODEL_D, # Outgoing port
+        ChannelMatcher(8), # Route channel 9 (=8+1) to the Model D
+        None, # No sysex matcher
+        ChannelMapper(lambda x: 0), # Map Model D messages to channel 1
+        RouterWithKeyboardSplit()
+    )
+    manager.addRule(
+        manager.YAMAHA_P45, # List of incoming ports
+        manager.BLOFELD, # Outgoing port
+        ChannelMatcher(10, 15), # Route channels 11-16 to the Blofeld
+        None, # No sysex matcher
+        ChannelMapper(lambda x: x - 10), # Map Blofeld messages to channels 1-6
+        RouterWithKeyboardSplit()
+    )
+    manager.addRule(
+        manager.YAMAHA_P45, # List of incoming ports
+        manager.MIDI_ADAPTER_CABLE, # Outgoing port for QY100
+        ChannelMatcher(0, 15), # Route all channels to the QY100
+        None, # No sysex matcher
+        None, # No channel mapper
+        RouterWithKeyboardSplit()
     )
     while True:
         # Update input ports
