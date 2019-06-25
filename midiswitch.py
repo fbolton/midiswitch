@@ -67,6 +67,10 @@ class PortManager:
     YAMAHA_P45 = "Digital Piano MIDI 1"
     MODEL_D = "MODEL D MIDI 1"
     BLOFELD = "Blofeld MIDI 1"
+    MIDIFACE_4x4_1 = "MIDI4x4 MIDI 1"
+    MIDIFACE_4x4_2 = "MIDI4x4 MIDI 2"
+    MIDIFACE_4x4_3 = "MIDI4x4 MIDI 3"
+    MIDIFACE_4x4_4 = "MIDI4x4 MIDI 4"
 
 
     def __init__(self):
@@ -516,6 +520,38 @@ def main():
     active_input_names = set()
     active_output_names = set()
     manager = PortManager()
+    manager.addRule(
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.YAMAHA_P45], # List of incoming ports
+        manager.MIDIFACE_4x4_1, # Outgoing port
+        ChannelMatcher(12), # Route channel 13 (=12+1) to OUT port 1 of Midiface 4x4
+        None, # No sysex matcher
+        ChannelMapper(lambda x: 0), # Map messages to channel 1 by default
+        RouterThru()
+    )
+    manager.addRule(
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.YAMAHA_P45], # List of incoming ports
+        manager.MIDIFACE_4x4_2, # Outgoing port
+        ChannelMatcher(13), # Route channel 14 (=13+1) to OUT port 2 of Midiface 4x4
+        None, # No sysex matcher
+        ChannelMapper(lambda x: 0), # Map messages to channel 1 by default
+        RouterThru()
+    )
+    manager.addRule(
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.YAMAHA_P45], # List of incoming ports
+        manager.MIDIFACE_4x4_3, # Outgoing port
+        ChannelMatcher(14), # Route channel 15 (=14+1) to OUT port 3 of Midiface 4x4
+        None, # No sysex matcher
+        ChannelMapper(lambda x: 0), # Map messages to channel 1 by default
+        RouterThru()
+    )
+    manager.addRule(
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.YAMAHA_P45], # List of incoming ports
+        manager.MIDIFACE_4x4_4, # Outgoing port
+        ChannelMatcher(15), # Route channel 16 (=15+1) to OUT port 4 of Midiface 4x4
+        None, # No sysex matcher
+        ChannelMapper(lambda x: 0), # Map messages to channel 1 by default
+        RouterThru()
+    )
     manager.addRule(
         [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE], # List of incoming ports
         manager.MODEL_D, # Outgoing port
