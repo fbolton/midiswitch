@@ -569,9 +569,17 @@ def main():
         RouterCCtoNote()
     )
     manager.addRule(
-        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE], # List of incoming ports
+        [manager.BEATSTEP_PRO_1, manager.MIDI_ADAPTER_CABLE], # List of incoming ports
         manager.MIDI_ADAPTER_CABLE, # Outgoing port for QY100
         ChannelMatcher(0, 15), # Route all channels to the QY100
+        None, # No sysex matcher
+        None, # No channel mapper
+        RouterBeatStepPro2QY100()
+    )
+    manager.addRule(
+        manager.KEYSTEP, # List of incoming ports
+        manager.MIDI_ADAPTER_CABLE, # Outgoing port for QY100
+        ChannelMatcher(3, 15), # Block channels 1, 2, and 3, used to control the Beatstep Pro
         None, # No sysex matcher
         None, # No channel mapper
         RouterBeatStepPro2QY100()
