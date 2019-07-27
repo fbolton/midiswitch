@@ -67,6 +67,7 @@ class PortManager:
     YAMAHA_P45 = "Digital Piano MIDI 1"
     MODEL_D = "MODEL D MIDI 1"
     BLOFELD = "Blofeld MIDI 1"
+    NOVATION_PEAK = "Peak MIDI 1"
     MIDIFACE_4x4_1 = "MIDI4x4 MIDI 1"
     MIDIFACE_4x4_2 = "MIDI4x4 MIDI 2"
     MIDIFACE_4x4_3 = "MIDI4x4 MIDI 3"
@@ -550,6 +551,14 @@ def main():
         ChannelMatcher(15), # Route channel 16 (=15+1) to OUT port 4 of Midiface 4x4
         None, # No sysex matcher
         ChannelMapper(lambda x: 0), # Map messages to channel 1 by default
+        RouterThru()
+    )
+    manager.addRule(
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.YAMAHA_P45], # List of incoming ports
+        manager.NOVATION_PEAK, # Outgoing port
+        ChannelMatcher(7), # Route channel 8 (=7+1) to the Novation Peak
+        None, # No sysex matcher
+        ChannelMapper(lambda x: 0), # Map Peak messages to channel 1
         RouterThru()
     )
     manager.addRule(
