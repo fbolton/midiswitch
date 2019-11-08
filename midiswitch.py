@@ -72,6 +72,9 @@ class PortManager:
     MIDIFACE_4x4_2 = "MIDI4x4 MIDI 2"
     MIDIFACE_4x4_3 = "MIDI4x4 MIDI 3"
     MIDIFACE_4x4_4 = "MIDI4x4 MIDI 4"
+    ANALOG_FOUR = "Elektron Analog Four MIDI 1"
+    ROLAND_RD_2000 = "RD-2000 MIDI 1"
+    BEHRINGER_K2 = "K-2 MIDI 1"
 
 
     def __init__(self):
@@ -522,7 +525,7 @@ def main():
     active_output_names = set()
     manager = PortManager()
     manager.addRule(
-        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.YAMAHA_P45], # List of incoming ports
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.ROLAND_RD_2000], # List of incoming ports
         manager.MIDIFACE_4x4_1, # Outgoing port
         ChannelMatcher(12), # Route channel 13 (=12+1) to OUT port 1 of Midiface 4x4
         None, # No sysex matcher
@@ -530,7 +533,7 @@ def main():
         RouterThru()
     )
     manager.addRule(
-        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.YAMAHA_P45], # List of incoming ports
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.ROLAND_RD_2000], # List of incoming ports
         manager.MIDIFACE_4x4_2, # Outgoing port
         ChannelMatcher(13), # Route channel 14 (=13+1) to OUT port 2 of Midiface 4x4
         None, # No sysex matcher
@@ -538,7 +541,7 @@ def main():
         RouterThru()
     )
     manager.addRule(
-        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.YAMAHA_P45], # List of incoming ports
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.ROLAND_RD_2000], # List of incoming ports
         manager.MIDIFACE_4x4_3, # Outgoing port
         ChannelMatcher(14), # Route channel 15 (=14+1) to OUT port 3 of Midiface 4x4
         None, # No sysex matcher
@@ -546,7 +549,7 @@ def main():
         RouterThru()
     )
     manager.addRule(
-        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.YAMAHA_P45], # List of incoming ports
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.ROLAND_RD_2000], # List of incoming ports
         manager.MIDIFACE_4x4_4, # Outgoing port
         ChannelMatcher(15), # Route channel 16 (=15+1) to OUT port 4 of Midiface 4x4
         None, # No sysex matcher
@@ -554,7 +557,15 @@ def main():
         RouterThru()
     )
     manager.addRule(
-        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.YAMAHA_P45], # List of incoming ports
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.ROLAND_RD_2000], # List of incoming ports
+        manager.ANALOG_FOUR, # Outgoing port
+        ChannelMatcher(6), # Route channel 7 (=6+1) to the Elektron Analog Four
+        None, # No sysex matcher
+        ChannelMapper(lambda x: 1), # Map Analog Four messages to channel 9 (auto channel)
+        RouterThru()
+    )
+    manager.addRule(
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.ROLAND_RD_2000], # List of incoming ports
         manager.NOVATION_PEAK, # Outgoing port
         ChannelMatcher(7), # Route channel 8 (=7+1) to the Novation Peak
         None, # No sysex matcher
@@ -562,7 +573,7 @@ def main():
         RouterThru()
     )
     manager.addRule(
-        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE], # List of incoming ports
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.ROLAND_RD_2000], # List of incoming ports
         manager.MODEL_D, # Outgoing port
         ChannelMatcher(8), # Route channel 9 (=8+1) to the Model D
         None, # No sysex matcher
@@ -570,12 +581,36 @@ def main():
         RouterToModelD()
     )
     manager.addRule(
-        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE], # List of incoming ports
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.ROLAND_RD_2000], # List of incoming ports
+        manager.BEHRINGER_K2, # Outgoing port
+        ChannelMatcher(7), # Route channel 8 (=7+1) to the Behringer K-2
+        None, # No sysex matcher
+        ChannelMapper(lambda x: 0), # Map K-2 messages to channel 1
+        RouterThru()
+    )
+    manager.addRule(
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.ROLAND_RD_2000], # List of incoming ports
         manager.BLOFELD, # Outgoing port
         ChannelMatcher(10, 15), # Route channels 11-16 to the Blofeld
         None, # No sysex matcher
         ChannelMapper(lambda x: x - 10), # Map Blofeld messages to channels 1-6
         RouterCCtoNote()
+    )
+    manager.addRule(
+        [manager.BEATSTEP_PRO_1], # List of incoming ports
+        manager.ROLAND_RD_2000, # Outgoing port for RD-2000
+        ChannelMatcher(0, 15), # Route all channels to the RD-2000
+        None, # No sysex matcher
+        None, # No channel mapper
+        RouterThru()
+    )
+    manager.addRule(
+        manager.KEYSTEP, # List of incoming ports
+        manager.ROLAND_RD_2000, # Outgoing port for RD-2000
+        ChannelMatcher(3, 15), # Block channels 1, 2, and 3, used to control the Beatstep Pro
+        None, # No sysex matcher
+        None, # No channel mapper
+        RouterThru()
     )
     manager.addRule(
         [manager.BEATSTEP_PRO_1, manager.MIDI_ADAPTER_CABLE], # List of incoming ports
@@ -600,30 +635,6 @@ def main():
         SysexDevice(0x43), # Match sysex messages with ID = 0x43
         None, # No channel mapper
         RouterQY100()
-    )
-    manager.addRule(
-        manager.YAMAHA_P45, # List of incoming ports
-        manager.MODEL_D, # Outgoing port
-        ChannelMatcher(8), # Route channel 9 (=8+1) to the Model D
-        None, # No sysex matcher
-        ChannelMapper(lambda x: 0), # Map Model D messages to channel 1
-        RouterWithKeyboardSplit()
-    )
-    manager.addRule(
-        manager.YAMAHA_P45, # List of incoming ports
-        manager.BLOFELD, # Outgoing port
-        ChannelMatcher(10, 15), # Route channels 11-16 to the Blofeld
-        None, # No sysex matcher
-        ChannelMapper(lambda x: x - 10), # Map Blofeld messages to channels 1-6
-        RouterWithKeyboardSplit()
-    )
-    manager.addRule(
-        manager.YAMAHA_P45, # List of incoming ports
-        manager.MIDI_ADAPTER_CABLE, # Outgoing port for QY100
-        ChannelMatcher(0, 15), # Route all channels to the QY100
-        None, # No sysex matcher
-        None, # No channel mapper
-        RouterWithKeyboardSplit()
     )
     while True:
         # Update input ports
