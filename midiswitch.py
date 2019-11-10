@@ -559,7 +559,7 @@ def main():
     manager.addRule(
         [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.ROLAND_RD_2000], # List of incoming ports
         manager.ANALOG_FOUR, # Outgoing port
-        ChannelMatcher(6), # Route channel 7 (=6+1) to the Elektron Analog Four
+        ChannelMatcher(5), # Route channel 6 (=5+1) to the Elektron Analog Four
         None, # No sysex matcher
         ChannelMapper(lambda x: 1), # Map Analog Four messages to channel 9 (auto channel)
         RouterThru()
@@ -567,9 +567,17 @@ def main():
     manager.addRule(
         [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.ROLAND_RD_2000], # List of incoming ports
         manager.NOVATION_PEAK, # Outgoing port
-        ChannelMatcher(7), # Route channel 8 (=7+1) to the Novation Peak
+        ChannelMatcher(6), # Route channel 7 (=6+1) to the Novation Peak
         None, # No sysex matcher
         ChannelMapper(lambda x: 0), # Map Peak messages to channel 1
+        RouterThru()
+    )
+    manager.addRule(
+        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.ROLAND_RD_2000], # List of incoming ports
+        manager.BEHRINGER_K2, # Outgoing port
+        ChannelMatcher(7), # Route channel 8 (=7+1) to the Behringer K-2
+        None, # No sysex matcher
+        ChannelMapper(lambda x: 0), # Map K-2 messages to channel 1
         RouterThru()
     )
     manager.addRule(
@@ -582,14 +590,6 @@ def main():
     )
     manager.addRule(
         [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.ROLAND_RD_2000], # List of incoming ports
-        manager.BEHRINGER_K2, # Outgoing port
-        ChannelMatcher(7), # Route channel 8 (=7+1) to the Behringer K-2
-        None, # No sysex matcher
-        ChannelMapper(lambda x: 0), # Map K-2 messages to channel 1
-        RouterThru()
-    )
-    manager.addRule(
-        [manager.BEATSTEP_PRO_1, manager.KEYSTEP, manager.MIDI_ADAPTER_CABLE, manager.ROLAND_RD_2000], # List of incoming ports
         manager.BLOFELD, # Outgoing port
         ChannelMatcher(10, 15), # Route channels 11-16 to the Blofeld
         None, # No sysex matcher
@@ -597,7 +597,7 @@ def main():
         RouterCCtoNote()
     )
     manager.addRule(
-        [manager.BEATSTEP_PRO_1], # List of incoming ports
+        [manager.BEATSTEP_PRO_1, manager.MIDI_ADAPTER_CABLE], # List of incoming ports
         manager.ROLAND_RD_2000, # Outgoing port for RD-2000
         ChannelMatcher(0, 15), # Route all channels to the RD-2000
         None, # No sysex matcher
